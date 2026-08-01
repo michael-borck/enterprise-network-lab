@@ -3,3 +3,5 @@ pcaps/*
 !pcaps/.gitkeep
 .DS_Store
 ._*
+logs/
+!pcaps/*.pcap

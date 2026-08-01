@@ -18,6 +18,11 @@ endif
 up: host
 	@find . -name '._*' -delete 2>/dev/null || true
 	$(DC) up -d --build
+	@# The sensor lives in the Perth router's network namespace. If compose
+	@# recreated that router, the sensor is still attached to the old, dead
+	@# namespace and silently sees nothing — so always restart it last.
+	@$(DC) restart ids >/dev/null 2>&1 || true
+	@echo "enterprise is up. try: make test"
 
 down:
 	$(DC) down
@@ -78,6 +83,52 @@ wan-blackhole:
 
 wan-heal:
 	$(DC) exec perth-router sh -c 'i=$$(ip -o -4 addr show | awk "/172\.16\.1\./ {print \$$2; exit}" | cut -d@ -f1); ip link set $$i up; tc qdisc replace dev $$i root netem delay 125ms'
+
+# ── Lab 01: intrusion detection ───────────────────────────────────────
+# The sensor watches every interface of the Perth router. Alerts land in
+# logs/suricata/ on the host, so you can tail them from a normal terminal.
+ids-alerts:
+	@tail -n 40 logs/suricata/fast.log 2>/dev/null || echo "no alerts yet — try 'make attack'"
+
+ids-watch:
+	tail -f logs/suricata/fast.log
+
+# Which rules fired, most frequent first
+ids-summary:
+	@grep -oE '\[1:[0-9]+:[0-9]+\] [^[]+' logs/suricata/fast.log 2>/dev/null \
+	  | sed -E 's/\[1:([0-9]+):[0-9]+\] /\1  /' | sort | uniq -c | sort -rn \
+	  || echo "no alerts yet"
+
+# Re-read config/ids/local.rules after you edit it
+ids-reload:
+	$(DC) restart ids
+	@echo "sensor reloaded — rules now:"
+	@sleep 12; $(DC) exec ids sh -c 'grep "rule files processed" /var/log/suricata/suricata.log | tail -1'
+
+# Run the scripted intrusion from the Perth workstation
+attack:
+	$(DC) exec perth-ws1 bash /attack-demo.sh
+
+# Record traffic on one of the Perth router's subnets, into pcaps/ on the host.
+#   make capture FILE=incident.pcap [NET=10.10.20] [SECS=60]
+# NET picks the subnet to watch — 10.10.20 servers (default), 10.10.10 users,
+# 172.16.1 the London WAN link. Note this captures a single Ethernet segment
+# on purpose: tcpdump -i any produces Linux cooked-capture frames, which have
+# no Ethernet header and therefore cannot be replayed with tcpreplay.
+capture:
+	@test -n "$(FILE)" || (echo "usage: make capture FILE=incident.pcap [NET=10.10.20] [SECS=60]" && exit 1)
+	@echo "capturing $(or $(NET),10.10.20).0/24 for $(or $(SECS),60)s ..."
+	-$(DC) exec perth-router sh -c 'i=$$(ip -o -4 addr show | awk "/$(subst .,\\.,$(or $(NET),10.10.20))\\./ {print \$$2; exit}" | cut -d@ -f1); timeout $(or $(SECS),60) tcpdump -ni $$i -w /pcaps/$(FILE) 2>&1 | tail -2'
+	@echo "saved pcaps/$(FILE)"
+
+# Replay a capture onto the Perth servers subnet, where the sensor sees it.
+#   make replay PCAP=incident.pcap [LOOP=3] [MBPS=10]
+#   SENSOR= overrides where frames are addressed (Lab 01 step 4 uses a
+#   deliberately wrong address to show detection collapse without it).
+replay:
+	@test -n "$(PCAP)" || (echo "usage: make replay PCAP=<file in pcaps/> [LOOP=n] [MBPS=n] [SENSOR=ip]" && exit 1)
+	$(DC) run --rm -e PCAP=$(PCAP) -e LOOP=$(or $(LOOP),1) -e MBPS=$(MBPS) \
+	  -e SENSOR_IP=$(or $(SENSOR),10.10.30.254) replay
 
 # Interactive shells on each office's workstation
 perth:

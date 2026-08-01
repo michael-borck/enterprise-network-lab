@@ -122,9 +122,6 @@ or disable offload: `ethtool -K eth0 tx off`.
 
 ## Roadmap
 
-- **Replay injection** — a tcpreplay container that plays labelled attack
-  PCAPs (e.g. malware-traffic-analysis.net) into a subnet as IDS fodder.
-- **IDS tap** — Suricata/Zeek container watching the WAN and server subnets.
 - **Firewall labs** — nftables policy on office edge routers.
 - **`pcap2compose`** — reconstruct a network topology from a capture file
   and replay the capture into it (forensics capstone).
@@ -134,3 +131,4 @@ or disable offload: `ethtool -K eth0 tx off`.
 | Lab | Topic |
 |---|---|
 | [00-tour](labs/00-tour.md) | Guided tour: feel the latency, trace the routing, watch DNS cross the WAN, break a link and watch OSPF heal it |
+| [01-ids](labs/01-ids.md) | Intrusion detection: attack the network, watch Suricata catch it, capture the incident, replay it, write and tune your own rule |

@@ -19,6 +19,7 @@ x-workstation: &workstation
   cap_add: [NET_ADMIN]
   volumes:
     - ./scripts/init-workstation.sh:/init.sh:ro
+    - ./scripts/attack-demo.sh:/attack-demo.sh:ro
   command: ["bash", "/init.sh"]
 
 services:
@@ -32,6 +33,7 @@ services:
       WAN_DELAY: "172.16.1.=125ms,172.16.2.=75ms"
     volumes:
       - ./config/frr/perth:/etc/frr
+      - ./pcaps:/pcaps
     networks:
       perth-users:   {ipv4_address: 10.10.10.254}
       perth-servers: {ipv4_address: 10.10.20.254}
@@ -103,6 +105,35 @@ services:
     networks:
       perth-servers: {ipv4_address: 10.10.20.80}
 
+  # ── Security monitoring ────────────────────────────────────────────
+  # The sensor shares the Perth router's network namespace, so it sees
+  # every interface the router has: all three Perth subnets and both WAN
+  # links. Passive — it has no address and answers nothing.
+  ids:
+    build: images/ids
+    cap_add: [NET_ADMIN, NET_RAW, SYS_NICE]
+    network_mode: "service:perth-router"
+    depends_on: [perth-router]
+    volumes:
+      - ./config/ids/local.rules:/var/lib/suricata/rules/local.rules:ro
+      - ./logs/suricata:/var/log/suricata
+
+  # Plays a capture file onto the DMZ segment, which has no hosts on it.
+  # Because nothing there owns the destination MACs in the capture, every
+  # replayed frame is an unknown unicast and the bridge floods it to all
+  # ports — including the router's, where the sensor lives. That gives the
+  # sensor the whole conversation, which a live segment would not (the
+  # bridge would deliver each frame only to the port owning that MAC).
+  #   make replay PCAP=incident.pcap
+  replay:
+    build: images/replay
+    cap_add: [NET_ADMIN, NET_RAW]
+    profiles: [tools]
+    volumes:
+      - ./pcaps:/pcaps:ro
+    networks:
+      perth-dmz: {}
+
   # ── Workstations (docker compose exec -it <name> bash) ─────────────
   perth-ws1:
     <<: *workstation
@@ -128,6 +159,7 @@ services:
     environment: {GATEWAY: 10.20.10.254, DNS: 10.20.10.53, TRAFFIC: "1"}
     volumes:
       - ./scripts/init-workstation.sh:/init.sh:ro
+      - ./scripts/attack-demo.sh:/attack-demo.sh:ro
       - ./scripts/traffic.sh:/traffic.sh:ro
     networks:
       london-users: {ipv4_address: 10.20.10.102}
@@ -137,6 +169,7 @@ services:
     environment: {GATEWAY: 10.30.10.254, DNS: 10.30.10.53, TRAFFIC: "1"}
     volumes:
       - ./scripts/init-workstation.sh:/init.sh:ro
+      - ./scripts/attack-demo.sh:/attack-demo.sh:ro
       - ./scripts/traffic.sh:/traffic.sh:ro
     networks:
       la-users: {ipv4_address: 10.30.10.102}
