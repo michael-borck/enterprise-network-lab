@@ -1,0 +1,5 @@
+# recorded captures live here but stay out of git
+pcaps/*
+!pcaps/.gitkeep
+.DS_Store
+._*

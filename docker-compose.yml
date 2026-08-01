@@ -1,0 +1,171 @@
+name: enterprise-network-lab
+
+# Three-office enterprise: Perth (HQ), London, LA.
+# Offices are joined by point-to-point WAN links shaped with tc netem,
+# routed by FRR (OSPF). Traffic between subnets can only flow through
+# the router containers.
+
+# Two Docker behaviours must be disabled for routing *through* a container
+# to work: raw-table anti-spoofing rules (Docker >= 28) that drop any frame
+# whose destination IP is not an endpoint on the receiving network, and the
+# DOCKER-INTERNAL chain of `internal: true` networks, which drops all
+# off-subnet traffic. Hence: "routed" gateway mode, and no `internal` flag
+# ("routed" also disables NAT, so the lab has no path to the outside anyway).
+x-routed-bridge: &routed
+  com.docker.network.bridge.gateway_mode_ipv4: routed
+
+x-workstation: &workstation
+  image: nicolaka/netshoot:latest
+  cap_add: [NET_ADMIN]
+  volumes:
+    - ./scripts/init-workstation.sh:/init.sh:ro
+  command: ["bash", "/init.sh"]
+
+services:
+  # ── Routers ────────────────────────────────────────────────────────
+  perth-router:
+    build: images/router
+    cap_add: [NET_ADMIN, NET_RAW, SYS_ADMIN]
+    sysctls: [net.ipv4.ip_forward=1]
+    environment:
+      # egress delay per WAN link (half the RTT; the far side adds the rest)
+      WAN_DELAY: "172.16.1.=125ms,172.16.2.=75ms"
+    volumes:
+      - ./config/frr/perth:/etc/frr
+    networks:
+      perth-users:   {ipv4_address: 10.10.10.254}
+      perth-servers: {ipv4_address: 10.10.20.254}
+      perth-dmz:     {ipv4_address: 10.10.30.254}
+      wan-perth-london: {ipv4_address: 172.16.1.1}
+      wan-perth-la:     {ipv4_address: 172.16.2.1}
+
+  london-router:
+    build: images/router
+    cap_add: [NET_ADMIN, NET_RAW, SYS_ADMIN]
+    sysctls: [net.ipv4.ip_forward=1]
+    environment:
+      WAN_DELAY: "172.16.1.=125ms,172.16.3.=70ms"
+    volumes:
+      - ./config/frr/london:/etc/frr
+    networks:
+      london-users: {ipv4_address: 10.20.10.254}
+      wan-perth-london: {ipv4_address: 172.16.1.2}
+      wan-london-la:    {ipv4_address: 172.16.3.1}
+
+  la-router:
+    build: images/router
+    cap_add: [NET_ADMIN, NET_RAW, SYS_ADMIN]
+    sysctls: [net.ipv4.ip_forward=1]
+    environment:
+      WAN_DELAY: "172.16.2.=75ms,172.16.3.=70ms"
+    volumes:
+      - ./config/frr/la:/etc/frr
+    networks:
+      la-users: {ipv4_address: 10.30.10.254}
+      wan-perth-la:  {ipv4_address: 172.16.2.2}
+      wan-london-la: {ipv4_address: 172.16.3.2}
+
+  # ── DNS (one resolver per office; Perth is authoritative for corp.lab)
+  perth-dns:
+    build: images/dns
+    cap_add: [NET_ADMIN]
+    environment: {GATEWAY: 10.10.20.254}
+    volumes:
+      - ./config/dns/perth.conf:/etc/dnsmasq.conf:ro
+    networks:
+      perth-servers: {ipv4_address: 10.10.20.53}
+
+  london-dns:
+    build: images/dns
+    cap_add: [NET_ADMIN]
+    environment: {GATEWAY: 10.20.10.254}
+    volumes:
+      - ./config/dns/london.conf:/etc/dnsmasq.conf:ro
+    networks:
+      london-users: {ipv4_address: 10.20.10.53}
+
+  la-dns:
+    build: images/dns
+    cap_add: [NET_ADMIN]
+    environment: {GATEWAY: 10.30.10.254}
+    volumes:
+      - ./config/dns/la.conf:/etc/dnsmasq.conf:ro
+    networks:
+      la-users: {ipv4_address: 10.30.10.53}
+
+  # ── Services ───────────────────────────────────────────────────────
+  intranet:
+    build: images/web
+    cap_add: [NET_ADMIN]
+    environment: {GATEWAY: 10.10.20.254}
+    volumes:
+      - ./config/web:/usr/share/nginx/html:ro
+    networks:
+      perth-servers: {ipv4_address: 10.10.20.80}
+
+  # ── Workstations (docker compose exec -it <name> bash) ─────────────
+  perth-ws1:
+    <<: *workstation
+    environment: {GATEWAY: 10.10.10.254, DNS: 10.10.20.53}
+    networks:
+      perth-users: {ipv4_address: 10.10.10.101}
+
+  london-ws1:
+    <<: *workstation
+    environment: {GATEWAY: 10.20.10.254, DNS: 10.20.10.53}
+    networks:
+      london-users: {ipv4_address: 10.20.10.101}
+
+  la-ws1:
+    <<: *workstation
+    environment: {GATEWAY: 10.30.10.254, DNS: 10.30.10.53}
+    networks:
+      la-users: {ipv4_address: 10.30.10.101}
+
+  # ── Background traffic so the network feels alive ──────────────────
+  london-user-sim:
+    <<: *workstation
+    environment: {GATEWAY: 10.20.10.254, DNS: 10.20.10.53, TRAFFIC: "1"}
+    volumes:
+      - ./scripts/init-workstation.sh:/init.sh:ro
+      - ./scripts/traffic.sh:/traffic.sh:ro
+    networks:
+      london-users: {ipv4_address: 10.20.10.102}
+
+  la-user-sim:
+    <<: *workstation
+    environment: {GATEWAY: 10.30.10.254, DNS: 10.30.10.53, TRAFFIC: "1"}
+    volumes:
+      - ./scripts/init-workstation.sh:/init.sh:ro
+      - ./scripts/traffic.sh:/traffic.sh:ro
+    networks:
+      la-users: {ipv4_address: 10.30.10.102}
+
+networks:
+  perth-users:
+    driver_opts: *routed
+    ipam: {config: [{subnet: 10.10.10.0/24}]}
+  perth-servers:
+    driver_opts: *routed
+    ipam: {config: [{subnet: 10.10.20.0/24}]}
+  perth-dmz:
+    driver_opts: *routed
+    ipam: {config: [{subnet: 10.10.30.0/24}]}
+  london-users:
+    driver_opts: *routed
+    ipam: {config: [{subnet: 10.20.10.0/24}]}
+  la-users:
+    driver_opts: *routed
+    ipam: {config: [{subnet: 10.30.10.0/24}]}
+# Docker claims the "gateway" address on every bridge for the host; the
+# default is .1, which is where the routers live on the WAN /24s — so the
+# bridge address is pushed out of the way to .200.
+  wan-perth-london:
+    driver_opts: *routed
+    ipam: {config: [{subnet: 172.16.1.0/24, gateway: 172.16.1.200}]}
+  wan-perth-la:
+    driver_opts: *routed
+    ipam: {config: [{subnet: 172.16.2.0/24, gateway: 172.16.2.200}]}
+  wan-london-la:
+    driver_opts: *routed
+    ipam: {config: [{subnet: 172.16.3.0/24, gateway: 172.16.3.200}]}
