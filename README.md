@@ -1,5 +1,7 @@
 # enterprise-network-lab
 
+**Landing page: https://michael-borck.github.io/enterprise-network-lab/**
+
 A miniature multi-site enterprise network that runs entirely in Docker.
 Three offices — **Perth (HQ)**, **London**, and **Los Angeles** — connected
 by latency-shaped WAN links, routed with real OSPF (FRR), with per-office
