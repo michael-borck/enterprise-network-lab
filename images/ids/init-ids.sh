@@ -12,7 +12,16 @@ set -eu
 if ! grep -q '^\s*- local.rules' /etc/suricata/suricata.yaml; then
     sed -i 's|^rule-files:|rule-files:\n  - local.rules|' /etc/suricata/suricata.yaml
 fi
-[ -f /var/lib/suricata/rules/local.rules ] || touch /var/lib/suricata/rules/local.rules
+# The rules live in a directory bind-mount (config/ids/) rather than a
+# single-file mount: rewriting a bind-mounted *file* on the host does not
+# reliably reach the container, so an edited rule file can appear truncated
+# inside. Copying from a mounted directory at startup always sees the real
+# current contents.
+if [ -f /lab-rules/local.rules ]; then
+    cp /lab-rules/local.rules /var/lib/suricata/rules/local.rules
+else
+    touch /var/lib/suricata/rules/local.rules
+fi
 
 # "up" filters out the kernel's dummy tunnel devices (erspan0, ip_vti0,
 # sit0 ...), which are always present and always down.

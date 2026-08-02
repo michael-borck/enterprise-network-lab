@@ -33,6 +33,7 @@ services:
       WAN_DELAY: "172.16.1.=125ms,172.16.2.=75ms"
     volumes:
       - ./config/frr/perth:/etc/frr
+      - ./config/nftables:/etc/nftables.lab.d:ro
       - ./pcaps:/pcaps
     networks:
       perth-users:   {ipv4_address: 10.10.10.254}
@@ -115,7 +116,7 @@ services:
     network_mode: "service:perth-router"
     depends_on: [perth-router]
     volumes:
-      - ./config/ids/local.rules:/var/lib/suricata/rules/local.rules:ro
+      - ./config/ids:/lab-rules:ro
       - ./logs/suricata:/var/log/suricata
 
   # Plays a capture file onto the DMZ segment, which has no hosts on it.

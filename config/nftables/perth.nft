@@ -1,0 +1,86 @@
+#!/usr/sbin/nft -f
+#
+# Perth edge firewall -- Lab 02.
+#
+# This is the real thing: nftables, the firewall in every modern Linux
+# distribution and the engine behind most Linux-based appliances. Edit this
+# file on your machine, then `make fw-load` to apply it. `make fw-list`
+# shows the live ruleset with packet counters.
+#
+# It ships WIDE OPEN on purpose. Closing it is the lab.
+
+flush ruleset
+
+table inet filter {
+
+    # -- Named sets make policy readable ------------------------------
+    set office_users {
+        type ipv4_addr
+        flags interval
+        elements = { 10.10.10.0/24, 10.20.10.0/24, 10.30.10.0/24 }
+    }
+
+    set branch_users {
+        type ipv4_addr
+        flags interval
+        elements = { 10.20.10.0/24, 10.30.10.0/24 }
+    }
+
+    set hq_servers {
+        type ipv4_addr
+        flags interval
+        elements = { 10.10.20.0/24 }
+    }
+
+    # -- Traffic terminating ON the router ----------------------------
+    # Leave this permissive. OSPF lives here: lock it down carelessly and
+    # you will drop your own routing protocol and partition the network.
+    # (Try it -- that is exercise 4.)
+    chain input {
+        type filter hook input priority filter; policy accept;
+    }
+
+    # -- Traffic PASSING THROUGH the router ---------------------------
+    # Every packet between two subnets crosses this chain. This is where
+    # office policy lives, and where Lab 02 happens.
+    chain forward {
+        type filter hook forward priority filter; policy accept;
+
+        # Established traffic is return traffic for something already
+        # allowed -- accept it first so the rules below only decide about
+        # *new* connections. Without this, allowing a request in one
+        # direction would still block its reply.
+        ct state established,related accept
+
+        # Counters with no verdict: they measure without changing anything.
+        # Watch them move with `make fw-list`. Put `counter` on a drop rule
+        # too -- `log` writes to the kernel log, which a container cannot
+        # read, so counters are how you see drops in this lab.
+        ip saddr @branch_users ip daddr @hq_servers counter comment "branch -> HQ servers"
+        ip saddr @office_users ip daddr 10.10.20.80 tcp dport 80 counter comment "intranet HTTP"
+
+        # -- Exercise 1 ------------------------------------------------
+        # Branch offices should reach the intranet web server and nothing
+        # else in the HQ servers subnet. Uncomment, then `make fw-load`:
+        #
+        # ip saddr @branch_users ip daddr 10.10.20.80 tcp dport 80 accept
+        # ip saddr @branch_users ip daddr @hq_servers counter log prefix "FW-DROP-BRANCH " drop
+
+        # -- Exercise 2 ------------------------------------------------
+        # Stop workstations talking to each other across offices -- the
+        # single most useful control against lateral movement.
+        #
+        # ip saddr @office_users ip daddr @office_users counter log prefix "FW-DROP-LATERAL " drop
+
+        # -- Exercise 3 ------------------------------------------------
+        # Branch resolvers must still reach the HQ DNS server, or every
+        # name in corp.lab stops resolving outside Perth. If you did
+        # exercise 1, this is already broken -- fix it here.
+        #
+        # ip saddr @branch_users ip daddr 10.10.20.53 udp dport 53 accept
+    }
+
+    chain output {
+        type filter hook output priority filter; policy accept;
+    }
+}

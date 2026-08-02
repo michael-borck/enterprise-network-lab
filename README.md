@@ -88,9 +88,15 @@ The `Makefile` detects which Docker you have and does the right thing:
 
 ## How it works
 
-- **Every network is `internal`** and Docker's inter-bridge isolation blocks
-  shortcuts through the host, so cross-subnet traffic can *only* flow through
-  the FRR router containers. What you see in `traceroute` is real routing.
+- **Networks use `routed` gateway mode and are not `internal`** — both are
+  required for a container to forward transit traffic (see the section
+  above). There is no NAT anywhere, so the lab has no path to the internet;
+  cross-subnet traffic can only flow through the FRR routers, and what you
+  see in `traceroute` is real routing.
+- **Editable configs are mounted as directories, not files.** Rewriting a
+  bind-mounted *file* on the host does not reliably reach the container —
+  the container can see a truncated copy. `config/nftables/` and
+  `config/ids/` are therefore directory mounts.
 - **Workstations replace Docker's default route** with their office router,
   and write `/etc/resolv.conf` to point at the office resolver directly —
   bypassing Docker's embedded DNS so every query is visible on the wire.
@@ -122,7 +128,6 @@ or disable offload: `ethtool -K eth0 tx off`.
 
 ## Roadmap
 
-- **Firewall labs** — nftables policy on office edge routers.
 - **`pcap2compose`** — reconstruct a network topology from a capture file
   and replay the capture into it (forensics capstone).
 
@@ -132,3 +137,4 @@ or disable offload: `ethtool -K eth0 tx off`.
 |---|---|
 | [00-tour](labs/00-tour.md) | Guided tour: feel the latency, trace the routing, watch DNS cross the WAN, break a link and watch OSPF heal it |
 | [01-ids](labs/01-ids.md) | Intrusion detection: attack the network, watch Suricata catch it, capture the incident, replay it, write and tune your own rule |
+| [02-firewall](labs/02-firewall.md) | Edge firewall: write real nftables policy, contain the branch offices, stop lateral movement, and learn why rule order is everything |

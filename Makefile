@@ -13,7 +13,10 @@ else
 DC = docker compose
 endif
 
-.PHONY: up down destroy host build ps logs test routes neighbors perth london la wan-cut wan-blackhole wan-heal
+.PHONY: up down destroy host build ps logs test routes neighbors perth london la \
+        wan-cut wan-blackhole wan-heal attack capture replay \
+        ids-alerts ids-watch ids-summary ids-reload \
+        fw-load fw-list fw-flush fw-counters fw-test
 
 up: host
 	@find . -name '._*' -delete 2>/dev/null || true
@@ -129,6 +132,41 @@ replay:
 	@test -n "$(PCAP)" || (echo "usage: make replay PCAP=<file in pcaps/> [LOOP=n] [MBPS=n] [SENSOR=ip]" && exit 1)
 	$(DC) run --rm -e PCAP=$(PCAP) -e LOOP=$(or $(LOOP),1) -e MBPS=$(MBPS) \
 	  -e SENSOR_IP=$(or $(SENSOR),10.10.30.254) replay
+
+# ── Lab 02: edge firewall ─────────────────────────────────────────────
+# Apply config/nftables/perth.nft to the Perth router. Loading is atomic:
+# if the file has a syntax error, nftables rejects the whole thing and the
+# previous ruleset stays in place.
+fw-load:
+	$(DC) exec perth-router nft -f /etc/nftables.lab.d/perth.nft
+	@echo "policy loaded"
+
+# Live ruleset with packet counters
+fw-list:
+	$(DC) exec perth-router nft -a list ruleset
+
+# Back to wide open (does not touch the file)
+fw-flush:
+	$(DC) exec perth-router nft flush ruleset
+	@echo "ruleset flushed — the router is wide open again"
+
+# What each rule has matched. nftables `log` writes to the kernel ring
+# buffer, which a container is not permitted to read (`dmesg` fails), so
+# `counter` on a rule is how you observe drops in this lab.
+fw-counters:
+	@$(DC) exec perth-router nft list chain inet filter forward \
+	  | grep -E 'counter|comment' | sed 's/^[[:space:]]*/  /'
+
+# Does policy do what you think? Each line is a real connection attempt.
+fw-test:
+	@echo "── London -> intranet HTTP (should be allowed) ──"
+	@$(DC) exec london-ws1 sh -c 'curl -s -m 5 -o /dev/null -w "  HTTP %{http_code}\n" http://10.10.20.80/ || echo "  BLOCKED"'
+	@echo "── London -> HQ DNS (needed for corp.lab to resolve) ──"
+	@$(DC) exec london-ws1 sh -c 'dig +short +time=3 +tries=1 @10.10.20.53 intranet.corp.lab || echo "  BLOCKED"'
+	@echo "── London -> HQ DNS server, ping (nothing needs this) ──"
+	@$(DC) exec london-ws1 sh -c 'ping -c1 -W3 10.10.20.53 >/dev/null 2>&1 && echo "  reachable" || echo "  BLOCKED"'
+	@echo "── London workstation -> Perth workstation (lateral movement) ──"
+	@$(DC) exec london-ws1 sh -c 'ping -c1 -W3 10.10.10.101 >/dev/null 2>&1 && echo "  reachable" || echo "  BLOCKED"'
 
 # Interactive shells on each office's workstation
 perth:
