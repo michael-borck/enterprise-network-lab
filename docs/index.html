@@ -182,10 +182,11 @@
     <div>
       <p class="eyebrow">A live multi-site network, in Docker</p>
       <h1>Run a global enterprise on your laptop.</h1>
-      <p class="lede">Three offices — Perth, London, Los Angeles — joined by WAN links with real
-        distance in them. Real OSPF routers, per-office DNS, an intranet, and simulated users
-        keeping traffic on the wire. Then five labs: measure it, attack it, detect the attack,
-        firewall it, break it seven ways, and rebuild the whole thing from a packet capture.</p>
+      <p class="lede">Four sites — Perth, London, Los Angeles and a remote mine site on satellite —
+        joined by WAN links with real distance in them. Real OSPF routers, per-office DNS, and
+        staff who work their own hours, so traffic follows the sun. Then six labs: measure it,
+        attack it, detect the attack, firewall it, break it seven ways, and rebuild the whole
+        thing from a packet capture.</p>
       <div class="cta">
         <a class="btn primary" href="#start">Get started</a>
         <a class="btn ghost" href="#labs">Browse the labs</a>
@@ -197,13 +198,16 @@
 <span class="p">perth-ws1&gt;</span> ping -c 3 ws1.london.corp.lab
 64 bytes from 10.20.10.101: ttl=62 time=253 ms
 64 bytes from 10.20.10.101: ttl=62 time=254 ms
-64 bytes from 10.20.10.101: ttl=62 time=253 ms
 <span class="d"># 253ms. London really is far away.</span>
 
-<span class="p">perth-ws1&gt;</span> traceroute -n 10.20.10.101
- 1  10.10.10.254   0.4 ms   <span class="d">office router</span>
- 2  172.16.1.2   252.7 ms   <span class="d">the WAN hop</span>
- 3  10.20.10.101 253.1 ms
+<span class="p">perth-ws1&gt;</span> ping -c 3 10.40.10.101   <span class="d"># the mine site</span>
+64 bytes from 10.40.10.101: ttl=62 time=616 ms
+64 bytes from 10.40.10.101: ttl=62 time=545 ms
+<span class="d"># satellite: slower, and it wobbles.</span>
+
+<span class="p">$</span> make clock
+  Perth    13:41  working
+  London   05:41  closed
 <span class="p">perth-ws1&gt;</span> <span class="cursor"></span></pre>
     </div>
   </section>
@@ -291,7 +295,7 @@
 
   <div id="labs" class="sec-h">
     <h2>The labs</h2>
-    <p>Five labs, all on the same running network. Work them in order — each builds on the last.</p>
+    <p>Six labs, all on the same running network. Work them in order — each builds on the last.</p>
   </div>
   <div class="grid">
     <a class="card" href="https://github.com/michael-borck/enterprise-network-lab/blob/main/labs/00-tour.md" target="_blank" rel="noopener">
@@ -335,33 +339,52 @@
         confidently wrong.</p>
       <div class="go">Open the lab →</div>
     </a>
+    <a class="card" href="https://github.com/michael-borck/enterprise-network-lab/blob/main/labs/05-baselining.md" target="_blank" rel="noopener">
+      <span class="num">05</span>
+      <span class="chip live">Available</span>
+      <h3>Baselining &amp; the anomaly signatures miss</h3>
+      <p>Every office works its own hours, so traffic follows the sun. Profile a full simulated day,
+        then hide an attack made entirely of ordinary packets sent at the wrong hour — and watch the
+        signature sensor say nothing at all.</p>
+      <div class="go">Open the lab →</div>
+    </a>
   </div>
 
   <div class="sec-h" style="margin-top:44px"><h2>The network</h2>
-    <p>Three offices, a triangle of shaped WAN links, OSPF everywhere. Cut any link and traffic reroutes.</p></div>
-  <svg class="topo" viewBox="0 0 920 430" role="img" aria-label="Topology: Perth HQ, London and LA offices joined by WAN links of 250, 150 and 140 milliseconds round-trip">
-    <path class="wan" d="M 250 110 L 670 110"/>
-    <text class="rtt" x="430" y="98">~250 ms RTT</text>
-    <path class="wan" d="M 195 165 L 420 330"/>
-    <text class="rtt" x="215" y="265">~150 ms</text>
-    <path class="wan" d="M 725 165 L 500 330"/>
-    <text class="rtt" x="625" y="265">~140 ms</text>
+    <p>Four sites, OSPF everywhere. Cut any link between the three offices and traffic reroutes; the mine site has only one way home.</p></div>
+  <svg class="topo" viewBox="0 0 920 515" role="img" aria-label="Topology: Perth HQ, London, Los Angeles and a Pilbara mine site, joined by WAN links of 250, 150, 140 and 600 milliseconds round-trip">
+    <path class="wan" d="M 330 100 L 590 100"/>
+    <text class="rtt" x="400" y="88">~250 ms RTT</text>
+    <path class="wan" d="M 300 155 L 430 230"/>
+    <text class="rtt" x="290" y="205">~150 ms</text>
+    <path class="wan" d="M 620 155 L 500 230"/>
+    <text class="rtt" x="560" y="205">~140 ms</text>
+    <path class="wan" d="M 150 155 L 150 380"/>
+    <text class="rtt" x="163" y="250">satellite</text>
+    <text class="rtt" x="163" y="268">~600 ms</text>
+    <text class="rtt" x="163" y="286">+ jitter, loss</text>
 
-    <rect class="box hq" x="60" y="55" width="270" height="115" rx="12"/>
-    <text x="80" y="85">Perth — HQ</text>
-    <text class="sub" x="80" y="107">users 10.10.10.0/24 · servers 10.10.20.0/24</text>
-    <text class="sub" x="80" y="125">dmz 10.10.30.0/24</text>
-    <text class="sub" x="80" y="150">dns .53 · intranet .80 · frr router .254</text>
+    <rect class="box hq" x="60" y="45" width="270" height="110" rx="12"/>
+    <text x="80" y="75">Perth — HQ</text>
+    <text class="sub" x="80" y="97">users .10 · servers .20 · dmz .30</text>
+    <text class="sub" x="80" y="115">10.10.0.0/16</text>
+    <text class="sub" x="80" y="138">dns · intranet · IDS sensor · firewall</text>
 
-    <rect class="box" x="590" y="55" width="270" height="115" rx="12"/>
-    <text x="610" y="85">London</text>
-    <text class="sub" x="610" y="107">users 10.20.10.0/24</text>
-    <text class="sub" x="610" y="132">dns .53 · user-sim .102 · frr router .254</text>
+    <rect class="box" x="590" y="45" width="270" height="110" rx="12"/>
+    <text x="610" y="75">London</text>
+    <text class="sub" x="610" y="97">users 10.20.10.0/24</text>
+    <text class="sub" x="610" y="120">local dns cache · office hours UTC</text>
 
-    <rect class="box" x="325" y="300" width="270" height="105" rx="12"/>
-    <text x="345" y="330">Los Angeles</text>
-    <text class="sub" x="345" y="352">users 10.30.10.0/24</text>
-    <text class="sub" x="345" y="377">dns .53 · user-sim .102 · frr router .254</text>
+    <rect class="box" x="325" y="230" width="270" height="105" rx="12"/>
+    <text x="345" y="260">Los Angeles</text>
+    <text class="sub" x="345" y="282">users 10.30.10.0/24</text>
+    <text class="sub" x="345" y="305">local dns cache · office hours UTC-8</text>
+
+    <rect class="box" x="40" y="380" width="290" height="105" rx="12"/>
+    <text x="60" y="410">Pilbara — mine site</text>
+    <text class="sub" x="60" y="432">users 10.40.10.0/24</text>
+    <text class="sub" x="60" y="455">no local resolver — every lookup</text>
+    <text class="sub" x="60" y="471">crosses the satellite</text>
   </svg>
   <p style="color:var(--muted);font-size:13px;margin:10px 0 0">The distance is <span class="mono">tc netem</span> on the
     WAN interfaces — but your tools can't tell. Everything here is the real thing: real FRR routing daemons,

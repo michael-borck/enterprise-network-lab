@@ -30,7 +30,7 @@ services:
     sysctls: [net.ipv4.ip_forward=1]
     environment:
       # egress delay per WAN link (half the RTT; the far side adds the rest)
-      WAN_DELAY: "172.16.1.=125ms,172.16.2.=75ms"
+      WAN_DELAY: "172.16.1.=delay 125ms;172.16.2.=delay 75ms;172.16.4.=delay 300ms 20ms distribution normal loss 0.5%"
     volumes:
       - ./config/frr/perth:/etc/frr
       - ./config/nftables:/etc/nftables.lab.d:ro
@@ -39,15 +39,16 @@ services:
       perth-users:   {ipv4_address: 10.10.10.254}
       perth-servers: {ipv4_address: 10.10.20.254}
       perth-dmz:     {ipv4_address: 10.10.30.254}
-      wan-perth-london: {ipv4_address: 172.16.1.1}
-      wan-perth-la:     {ipv4_address: 172.16.2.1}
+      wan-perth-london:  {ipv4_address: 172.16.1.1}
+      wan-perth-la:      {ipv4_address: 172.16.2.1}
+      wan-perth-pilbara: {ipv4_address: 172.16.4.1}
 
   london-router:
     build: images/router
     cap_add: [NET_ADMIN, NET_RAW, SYS_ADMIN]
     sysctls: [net.ipv4.ip_forward=1]
     environment:
-      WAN_DELAY: "172.16.1.=125ms,172.16.3.=70ms"
+      WAN_DELAY: "172.16.1.=delay 125ms;172.16.3.=delay 70ms"
     volumes:
       - ./config/frr/london:/etc/frr
     networks:
@@ -60,13 +61,28 @@ services:
     cap_add: [NET_ADMIN, NET_RAW, SYS_ADMIN]
     sysctls: [net.ipv4.ip_forward=1]
     environment:
-      WAN_DELAY: "172.16.2.=75ms,172.16.3.=70ms"
+      WAN_DELAY: "172.16.2.=delay 75ms;172.16.3.=delay 70ms"
     volumes:
       - ./config/frr/la:/etc/frr
     networks:
       la-users: {ipv4_address: 10.30.10.254}
       wan-perth-la:  {ipv4_address: 172.16.2.2}
       wan-london-la: {ipv4_address: 172.16.3.2}
+
+  # Pilbara mine site: a remote operation on a satellite link -- 600ms
+  # round trip, jitter, and a little loss. Deliberately has NO local DNS
+  # resolver, so every name lookup makes the satellite trip to Perth.
+  pilbara-router:
+    build: images/router
+    cap_add: [NET_ADMIN, NET_RAW, SYS_ADMIN]
+    sysctls: [net.ipv4.ip_forward=1]
+    environment:
+      WAN_DELAY: "172.16.4.=delay 300ms 20ms distribution normal loss 0.5%"
+    volumes:
+      - ./config/frr/pilbara:/etc/frr
+    networks:
+      pilbara-users: {ipv4_address: 10.40.10.254}
+      wan-perth-pilbara: {ipv4_address: 172.16.4.2}
 
   # ── DNS (one resolver per office; Perth is authoritative for corp.lab)
   perth-dns:
@@ -154,10 +170,25 @@ services:
     networks:
       la-users: {ipv4_address: 10.30.10.101}
 
+  pilbara-ws1:
+    <<: *workstation
+    environment: {GATEWAY: 10.40.10.254, DNS: 10.10.20.53}
+    networks:
+      pilbara-users: {ipv4_address: 10.40.10.101}
+
   # ── Background traffic so the network feels alive ──────────────────
+  # Each office keeps its own hours. SIM_HOUR compresses time so a full
+  # 24-hour cycle takes 24 minutes -- long enough to watch the workday move
+  # around the planet, short enough to fit in a lab session.
   london-user-sim:
     <<: *workstation
-    environment: {GATEWAY: 10.20.10.254, DNS: 10.20.10.53, TRAFFIC: "1"}
+    environment:
+      GATEWAY: 10.20.10.254
+      DNS: 10.20.10.53
+      TRAFFIC: "1"
+      SITE: London
+      TZ_OFFSET: "0"
+      SIM_HOUR: "${SIM_HOUR:-60}"
     volumes:
       - ./scripts/init-workstation.sh:/init.sh:ro
       - ./scripts/attack-demo.sh:/attack-demo.sh:ro
@@ -167,13 +198,51 @@ services:
 
   la-user-sim:
     <<: *workstation
-    environment: {GATEWAY: 10.30.10.254, DNS: 10.30.10.53, TRAFFIC: "1"}
+    environment:
+      GATEWAY: 10.30.10.254
+      DNS: 10.30.10.53
+      TRAFFIC: "1"
+      SITE: LA
+      TZ_OFFSET: "-8"
+      SIM_HOUR: "${SIM_HOUR:-60}"
     volumes:
       - ./scripts/init-workstation.sh:/init.sh:ro
       - ./scripts/attack-demo.sh:/attack-demo.sh:ro
       - ./scripts/traffic.sh:/traffic.sh:ro
     networks:
       la-users: {ipv4_address: 10.30.10.102}
+
+  perth-user-sim:
+    <<: *workstation
+    environment:
+      GATEWAY: 10.10.10.254
+      DNS: 10.10.20.53
+      TRAFFIC: "1"
+      SITE: Perth
+      TZ_OFFSET: "8"
+      SIM_HOUR: "${SIM_HOUR:-60}"
+    volumes:
+      - ./scripts/init-workstation.sh:/init.sh:ro
+      - ./scripts/attack-demo.sh:/attack-demo.sh:ro
+      - ./scripts/traffic.sh:/traffic.sh:ro
+    networks:
+      perth-users: {ipv4_address: 10.10.10.102}
+
+  pilbara-user-sim:
+    <<: *workstation
+    environment:
+      GATEWAY: 10.40.10.254
+      DNS: 10.10.20.53
+      TRAFFIC: "1"
+      SITE: Pilbara
+      TZ_OFFSET: "8"
+      SIM_HOUR: "${SIM_HOUR:-60}"
+    volumes:
+      - ./scripts/init-workstation.sh:/init.sh:ro
+      - ./scripts/attack-demo.sh:/attack-demo.sh:ro
+      - ./scripts/traffic.sh:/traffic.sh:ro
+    networks:
+      pilbara-users: {ipv4_address: 10.40.10.102}
 
 networks:
   perth-users:
@@ -200,6 +269,12 @@ networks:
   wan-perth-la:
     driver_opts: *routed
     ipam: {config: [{subnet: 172.16.2.0/24, gateway: 172.16.2.200}]}
+  wan-perth-pilbara:
+    driver_opts: *routed
+    ipam: {config: [{subnet: 172.16.4.0/24, gateway: 172.16.4.200}]}
+  pilbara-users:
+    driver_opts: *routed
+    ipam: {config: [{subnet: 10.40.10.0/24}]}
   wan-london-la:
     driver_opts: *routed
     ipam: {config: [{subnet: 172.16.3.0/24, gateway: 172.16.3.200}]}

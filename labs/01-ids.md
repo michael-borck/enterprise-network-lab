@@ -1,7 +1,8 @@
 # Lab 01 — Intrusion detection
 
 There is a Suricata sensor on the Perth router. It sees every packet
-crossing the office boundary: all three Perth subnets and both WAN links.
+crossing the office boundary: all three Perth subnets and all three WAN
+links (London, LA, and the satellite hop to the Pilbara mine site).
 In this lab you attack the network, watch the sensor notice, record the
 incident, replay it, and then write a rule of your own.
 
@@ -26,6 +27,13 @@ lab works offline) and **`config/ids/local.rules`** — seven short rules
 written for this lab, which you can read end to end in two minutes.
 
 Open `config/ids/local.rules` now. Every rule there is deliberately simple.
+
+Next to it, `config/ids/threshold.config` suppresses a handful of Suricata
+*engine* events — "truncated packet", "invalid checksum" — which fire in
+their thousands because the sensor watches Docker `veth` interfaces. They
+are not detections, and left alone they bury everything that is. Tuning
+those out is the first job on any real sensor; [Lab 05](05-baselining.md)
+comes back to why it matters.
 
 ## 2. Attack the network
 
@@ -73,8 +81,8 @@ tcpdump -r /pcaps/my-incident.pcap -nn 'tcp[tcpflags] & tcp-syn != 0 and src 10.
 
 That last count is the port scan, on its own, in one line.
 
-Notice what else is in there: the London and LA user simulators browsing
-the intranet the whole time. **Your attack is a minority of the traffic.**
+Notice what else is in there: whichever offices are awake, browsing the
+intranet the whole time. **Your attack is a minority of the traffic.**
 That is the real problem with detection, and it is why this lab has
 background noise at all.
 
@@ -124,8 +132,8 @@ The intranet has no `/admin` page, so *every* request for one is
 suspicious. There is already a rule for that. Write the next one yourself.
 
 Open `config/ids/local.rules` and add a rule that alerts when anyone
-outside Perth requests the intranet at all — London and LA browsing HQ is
-normal here, so this will be noisy, which is the point:
+outside Perth requests the intranet at all — the branch offices browsing
+HQ is normal here, so this will be noisy, which is the point:
 
 ```
 alert http [10.20.0.0/16,10.30.0.0/16] any -> 10.10.20.80 80 ( \
@@ -140,8 +148,8 @@ make ids-reload
 make ids-watch
 ```
 
-Within seconds you will be drowning in alerts from the London and LA user
-simulators. **That is the lesson.** A rule that fires on normal behaviour
+Within seconds you will be drowning in alerts from whichever branch
+offices are currently awake. **That is the lesson.** A rule that fires on normal behaviour
 is worse than no rule: it buries the seven alerts that mattered.
 
 Now fix it. Some options, in increasing order of sophistication:
@@ -156,8 +164,11 @@ while `make attack` still gets caught.
 ## 6. Clean up
 
 ```sh
-: > logs/suricata/fast.log     # reset the alert log
+make ids-reset     # clears the alert log and restarts the sensor
 ```
+
+(Truncate `logs/suricata/fast.log` by hand and Suricata keeps writing at
+its old offset, so you get a screenful of NUL bytes. Hence the target.)
 
 ## Questions to take away
 

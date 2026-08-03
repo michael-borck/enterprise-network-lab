@@ -12,6 +12,8 @@ set -eu
 if ! grep -q '^\s*- local.rules' /etc/suricata/suricata.yaml; then
     sed -i 's|^rule-files:|rule-files:\n  - local.rules|' /etc/suricata/suricata.yaml
 fi
+# The threshold/suppression file ships commented out; switch it on.
+sed -i 's|^# *threshold-file:|threshold-file:|' /etc/suricata/suricata.yaml
 # The rules live in a directory bind-mount (config/ids/) rather than a
 # single-file mount: rewriting a bind-mounted *file* on the host does not
 # reliably reach the container, so an edited rule file can appear truncated
@@ -22,6 +24,10 @@ if [ -f /lab-rules/local.rules ]; then
 else
     touch /var/lib/suricata/rules/local.rules
 fi
+
+# Sensor tuning: suppressions for engine-level noise. See the file for why.
+[ -f /lab-rules/threshold.config ] && \
+    cp /lab-rules/threshold.config /etc/suricata/threshold.config
 
 # "up" filters out the kernel's dummy tunnel devices (erspan0, ip_vti0,
 # sit0 ...), which are always present and always down.

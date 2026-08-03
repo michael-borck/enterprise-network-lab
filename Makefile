@@ -15,9 +15,9 @@ endif
 
 .PHONY: up down destroy host build ps logs test routes neighbors perth london la \
         wan-cut wan-blackhole wan-heal attack capture replay \
-        ids-alerts ids-watch ids-summary ids-reload \
+        ids-alerts ids-watch ids-summary ids-reload ids-reset \
         fw-load fw-list fw-flush fw-counters fw-test \
-        fault fault-clear iperf rebuild
+        fault fault-clear iperf rebuild clock activity pilbara baseline anomaly
 
 up: host
 	@find . -name '._*' -delete 2>/dev/null || true
@@ -103,11 +103,33 @@ ids-summary:
 	  | sed -E 's/\[1:([0-9]+):[0-9]+\] /\1  /' | sort | uniq -c | sort -rn \
 	  || echo "no alerts yet"
 
-# Re-read config/ids/local.rules after you edit it
+# Clear the alert log. Truncating a file Suricata holds open leaves the
+# writer at its old offset (you get a screenful of NULs), so the sensor is
+# restarted alongside it.
+ids-reset:
+	@: > logs/suricata/fast.log
+	@$(DC) restart ids >/dev/null
+	@echo "alert log cleared and sensor restarted"
+
+# Re-read config/ids/*.rules after you edit them.
+#
+# On Docker Desktop an edit on the host can take a few seconds to appear
+# inside the container (the file crosses macOS -> the Desktop VM -> the
+# nested Docker host). Restarting the sensor before the edit has landed
+# silently reloads the OLD file, so this waits until the container sees the
+# same byte count the host has, then reports what actually loaded.
 ids-reload:
-	$(DC) restart ids
-	@echo "sensor reloaded — rules now:"
-	@sleep 12; $(DC) exec ids sh -c 'grep "rule files processed" /var/log/suricata/suricata.log | tail -1'
+	@want=$$(wc -c < config/ids/local.rules); \
+	 printf 'waiting for the sensor to see your edit'; \
+	 for i in $$(seq 1 30); do \
+	   got=$$($(DC) exec -T ids wc -c < /lab-rules/local.rules 2>/dev/null | tr -d ' \r'); \
+	   [ "$$got" = "$$want" ] && break; printf '.'; sleep 1; \
+	 done; echo
+	@$(DC) restart ids >/dev/null
+	@sleep 14
+	@$(DC) exec ids sh -c 'grep -hE "rule files processed|Threshold config parsed" \
+	   /var/log/suricata/suricata.log | tail -2' \
+	 | sed 's/^.*Info: /  /'
 
 # Run the scripted intrusion from the Perth workstation
 attack:
@@ -229,6 +251,33 @@ rebuild:
 	python3 scripts/pcap2compose.py pcaps/$(PCAP) -o $(or $(OUT),rebuilt)
 	@echo "read $(or $(OUT),rebuilt)/REPORT.md before trusting the compose file"
 
+# ── Follow-the-sun ────────────────────────────────────────────────────
+# Where each office is in its working day. Time is compressed: one
+# simulated hour per SIM_HOUR real seconds (default 60, so a day = 24 min).
+clock:
+	@SIM_HOUR=$(or $(SIM_HOUR),60) sh scripts/clock.sh
+
+# Who is actually talking right now, by office
+activity:
+	@echo "packets seen per office subnet over 10s:"
+	@$(DC) exec perth-router sh -c 'timeout 10 tcpdump -ni any -q 2>/dev/null | \
+	  grep -oE "10\.(10|20|30|40)\.10\.[0-9]+" | cut -d. -f1-3 | sort | uniq -c | sort -rn' || true
+
+# Profile a capture: who talked, at what local hour, and what fell outside
+# the working day.  make baseline PCAP=day.pcap
+baseline:
+	@test -n "$(PCAP)" || (echo "usage: make baseline PCAP=<file in pcaps/>" && exit 1)
+	@python3 scripts/baseline.py pcaps/$(PCAP) --sim-hour $(or $(SIM_HOUR),60)
+
+# A large transfer out of an office that is closed. Entirely ordinary
+# traffic -- no exploit, no malware, nothing a signature would match. The
+# only thing wrong with it is the hour.  make anomaly SITE=london
+anomaly:
+	@echo "staging an out-of-hours bulk transfer from $(or $(SITE),london) ..."
+	@$(DC) exec $(or $(SITE),london)-ws1 sh -c \
+	  'for i in 1 2 3; do curl -s -o /dev/null http://intranet.corp.lab:8080/large.bin; done'
+	@echo "done — now find it: make capture ... ; make baseline PCAP=..."
+
 # Interactive shells on each office's workstation
 perth:
 	$(DC) exec -it perth-ws1 bash
@@ -238,3 +287,6 @@ london:
 
 la:
 	$(DC) exec -it la-ws1 bash
+
+pilbara:
+	$(DC) exec -it pilbara-ws1 bash

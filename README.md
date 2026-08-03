@@ -3,9 +3,10 @@
 **Landing page: https://michael-borck.github.io/enterprise-network-lab/**
 
 A miniature multi-site enterprise network that runs entirely in Docker.
-Three offices — **Perth (HQ)**, **London**, and **Los Angeles** — connected
-by latency-shaped WAN links, routed with real OSPF (FRR), with per-office
-DNS resolvers and background user traffic so the network feels alive.
+Four sites — **Perth (HQ)**, **London**, **Los Angeles**, and a remote
+**Pilbara** mine site on a satellite link — connected by latency-shaped WAN
+links and routed with real OSPF (FRR). Each office keeps its own working
+hours, so traffic follows the sun around the network.
 
 Everything in here is the real thing: real `tcpdump`, real `nftables`
 targets, real FRR routing daemons, real dnsmasq. No wrappers, no mockups.
@@ -33,9 +34,15 @@ graph TB
         AU["users 10.30.10.0/24<br/>ws1 .101 · dns .53 · sim .102"]
         AU --- AR
     end
+    subgraph Pilbara["Pilbara mine site (10.40.0.0/16)"]
+        MR[pilbara-router]
+        MU["users 10.40.10.0/24<br/>ws1 .101 · sim .102<br/><i>no local DNS</i>"]
+        MU --- MR
+    end
     PR ==|"172.16.1.0/24<br/>~250ms RTT"| LR
     PR ==|"172.16.2.0/24<br/>~150ms RTT"| AR
     LR ==|"172.16.3.0/24<br/>~140ms RTT"| AR
+    PR ==|"172.16.4.0/24<br/>satellite: ~600ms RTT<br/>jitter + 0.5% loss"| MR
 ```
 
 ## Addressing plan
@@ -47,13 +54,32 @@ graph TB
 | perth-dmz | 10.10.30.0/24 | (empty for now), gateway `.254` |
 | london-users | 10.20.10.0/24 | ws1 `.101`, dns `.53`, user-sim `.102`, gateway `.254` |
 | la-users | 10.30.10.0/24 | ws1 `.101`, dns `.53`, user-sim `.102`, gateway `.254` |
+| pilbara-users | 10.40.10.0/24 | ws1 `.101`, user-sim `.102`, gateway `.254` — **no local resolver** |
 | wan-perth-london | 172.16.1.0/24 | perth `.1`, london `.2` — 125ms egress delay each side |
 | wan-perth-la | 172.16.2.0/24 | perth `.1`, la `.2` — 75ms each side |
 | wan-london-la | 172.16.3.0/24 | london `.1`, la `.2` — 70ms each side |
+| wan-perth-pilbara | 172.16.4.0/24 | perth `.1`, pilbara `.2` — satellite: 300ms each side, ±20ms jitter, 0.5% loss |
 
 DNS: Perth's resolver (`10.10.20.53`) is authoritative for `corp.lab`.
 London and LA resolvers forward `corp.lab` queries to Perth across the
 WAN and cache the answers — first lookup is slow, the next is instant.
+Pilbara deliberately has **no resolver of its own**, so every lookup there
+makes the full satellite round trip. The contrast is the point.
+
+## Follow the sun
+
+Each office works its own hours (09:00–17:00 local, with a lunch dip and a
+02:00 nightly backup). Time is compressed — one simulated hour per 60 real
+seconds by default, so a full day takes 24 minutes:
+
+```sh
+make clock       # where each office is in its working day
+make activity    # who is actually transmitting right now
+```
+
+Set `SIM_HOUR` to change the compression (`SIM_HOUR=10 make up` gives a day
+every 4 minutes; `SIM_HOUR=3600` is real time). Anything reading the data
+back — `make baseline` — needs the same value.
 
 ## Quick start
 
@@ -135,3 +161,4 @@ or disable offload: `ethtool -K eth0 tx off`.
 | [02-firewall](labs/02-firewall.md) | Edge firewall: write real nftables policy, contain the branch offices, stop lateral movement, and learn why rule order is everything |
 | [03-wan-troubleshooting](labs/03-wan-troubleshooting.md) | Diagnose seven injected WAN faults — loss, jitter, one-way loss, an MTU black hole, DNS, a bandwidth cap, and asymmetric routing |
 | [04-pcap2compose](labs/04-pcap2compose.md) | Capstone: reconstruct an unknown network from a packet capture, stand it back up in Docker, and find everything the reconstruction gets confidently wrong |
+| [05-baselining](labs/05-baselining.md) | Behavioural detection: profile a full simulated day per office, then find an attack made entirely of ordinary packets sent at the wrong hour |
