@@ -138,3 +138,4 @@ or disable offload: `ethtool -K eth0 tx off`.
 | [00-tour](labs/00-tour.md) | Guided tour: feel the latency, trace the routing, watch DNS cross the WAN, break a link and watch OSPF heal it |
 | [01-ids](labs/01-ids.md) | Intrusion detection: attack the network, watch Suricata catch it, capture the incident, replay it, write and tune your own rule |
 | [02-firewall](labs/02-firewall.md) | Edge firewall: write real nftables policy, contain the branch offices, stop lateral movement, and learn why rule order is everything |
+| [03-wan-troubleshooting](labs/03-wan-troubleshooting.md) | Diagnose seven injected WAN faults — loss, jitter, one-way loss, an MTU black hole, DNS, a bandwidth cap, and asymmetric routing |

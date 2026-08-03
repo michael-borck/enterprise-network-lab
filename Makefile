@@ -16,7 +16,8 @@ endif
 .PHONY: up down destroy host build ps logs test routes neighbors perth london la \
         wan-cut wan-blackhole wan-heal attack capture replay \
         ids-alerts ids-watch ids-summary ids-reload \
-        fw-load fw-list fw-flush fw-counters fw-test
+        fw-load fw-list fw-flush fw-counters fw-test \
+        fault fault-clear iperf
 
 up: host
 	@find . -name '._*' -delete 2>/dev/null || true
@@ -85,7 +86,7 @@ wan-blackhole:
 	$(DC) exec perth-router sh -c 'tc qdisc change dev $$(ip -o -4 addr show | awk "/172\.16\.1\./ {print \$$2; exit}" | cut -d@ -f1) root netem delay 125ms loss 100%'
 
 wan-heal:
-	$(DC) exec perth-router sh -c 'i=$$(ip -o -4 addr show | awk "/172\.16\.1\./ {print \$$2; exit}" | cut -d@ -f1); ip link set $$i up; tc qdisc replace dev $$i root netem delay 125ms'
+	$(DC) exec perth-router sh -c 'i=$$(ip -o -4 addr show | awk "/172\.16\.1\./ {print \$$2; exit}" | cut -d@ -f1); ip link set $$i up; tc qdisc del dev $$i root 2>/dev/null; tc qdisc add dev $$i root netem delay 125ms'
 
 # ── Lab 01: intrusion detection ───────────────────────────────────────
 # The sensor watches every interface of the Perth router. Alerts land in
@@ -167,6 +168,59 @@ fw-test:
 	@$(DC) exec london-ws1 sh -c 'ping -c1 -W3 10.10.20.53 >/dev/null 2>&1 && echo "  reachable" || echo "  BLOCKED"'
 	@echo "── London workstation -> Perth workstation (lateral movement) ──"
 	@$(DC) exec london-ws1 sh -c 'ping -c1 -W3 10.10.10.101 >/dev/null 2>&1 && echo "  reachable" || echo "  BLOCKED"'
+
+# ── Lab 03: WAN troubleshooting ───────────────────────────────────────
+# Inject a fault and diagnose it:  make fault N=3   ...   make fault-clear
+# Don't read past this line if you want the exercise to be a fair test.
+PL = $$(ip -o -4 addr show | awk "/172\.16\.1\./ {print \$$2; exit}" | cut -d@ -f1)
+
+fault:
+	@test -n "$(N)" || (echo "usage: make fault N=<1..7>   (then: make fault-clear)" && exit 1)
+	@$(MAKE) --no-print-directory fault-$(N)
+	@echo "fault $(N) injected. Diagnose it — see labs/03-wan-troubleshooting.md"
+
+fault-1:
+	@$(DC) exec perth-router sh -c 'tc qdisc replace dev $(PL) root netem delay 125ms loss 12%'
+
+fault-2:
+	@$(DC) exec perth-router sh -c 'tc qdisc replace dev $(PL) root netem delay 125ms 95ms distribution normal'
+
+fault-3:
+	@$(DC) exec london-router sh -c 'tc qdisc replace dev $(PL) root netem delay 125ms loss 30%'
+
+# A path-MTU black hole: large packets toward London vanish and no ICMP
+# comes back to explain it. (Done with nftables rather than by lowering the
+# interface MTU -- OSPF checks MTU when forming adjacencies, so shrinking
+# the interface would break routing instead of silently eating big packets.)
+fault-4:
+	@$(DC) exec perth-router sh -c 'nft add table inet lab_fault; \
+	  nft add chain inet lab_fault hole "{ type filter hook forward priority -10; policy accept; }"; \
+	  nft add rule inet lab_fault hole ip daddr 10.20.10.0/24 ip length 1201-65535 counter drop'
+
+fault-5:
+	@$(DC) stop london-dns >/dev/null
+
+fault-6:
+	@$(DC) exec perth-router sh -c 'tc qdisc replace dev $(PL) root netem delay 125ms rate 1mbit'
+
+fault-7:
+	@$(DC) exec perth-router vtysh -c "configure terminal" -c "ip route 10.20.10.0/24 172.16.2.2" >/dev/null
+
+# `tc qdisc replace` merges options into an existing netem qdisc instead of
+# replacing them, so faults would otherwise pile up. Delete, then re-add.
+fault-clear:
+	@$(DC) exec perth-router sh -c 'tc qdisc del dev $(PL) root 2>/dev/null; tc qdisc add dev $(PL) root netem delay 125ms; ip link set dev $(PL) mtu 1500' 2>/dev/null || true
+	@$(DC) exec london-router sh -c 'tc qdisc del dev $(PL) root 2>/dev/null; tc qdisc add dev $(PL) root netem delay 125ms; ip link set dev $(PL) mtu 1500' 2>/dev/null || true
+	@$(DC) exec perth-router sh -c 'nft delete table inet lab_fault' 2>/dev/null || true
+	@$(DC) exec perth-router vtysh -c "configure terminal" -c "no ip route 10.20.10.0/24 172.16.2.2" >/dev/null 2>&1 || true
+	@$(DC) start london-dns >/dev/null 2>&1 || true
+	@echo "all faults cleared"
+
+# Throughput between two offices — the quickest way to see a link is sick
+iperf:
+	@$(DC) exec -d london-ws1 iperf3 -s >/dev/null 2>&1 || true
+	@sleep 1
+	@$(DC) exec perth-ws1 iperf3 -c 10.20.10.101 -t 8 -i 2 || true
 
 # Interactive shells on each office's workstation
 perth:
