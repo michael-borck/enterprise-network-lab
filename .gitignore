@@ -5,3 +5,5 @@ pcaps/*
 ._*
 logs/
 !pcaps/*.pcap
+rebuilt/
+rebuilt-*/

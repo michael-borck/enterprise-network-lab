@@ -184,8 +184,8 @@
       <h1>Run a global enterprise on your laptop.</h1>
       <p class="lede">Three offices — Perth, London, Los Angeles — joined by WAN links with real
         distance in them. Real OSPF routers, per-office DNS, an intranet, and simulated users
-        keeping traffic on the wire. Then you get a shell and standard tools: ping it, trace it,
-        sniff it, break it, watch it heal.</p>
+        keeping traffic on the wire. Then five labs: measure it, attack it, detect the attack,
+        firewall it, break it seven ways, and rebuild the whole thing from a packet capture.</p>
       <div class="cta">
         <a class="btn primary" href="#start">Get started</a>
         <a class="btn ghost" href="#labs">Browse the labs</a>
@@ -291,7 +291,7 @@
 
   <div id="labs" class="sec-h">
     <h2>The labs</h2>
-    <p>Lab 00 is ready today; the rest of the series layers onto the same running network.</p>
+    <p>Five labs, all on the same running network. Work them in order — each builds on the last.</p>
   </div>
   <div class="grid">
     <a class="card" href="https://github.com/michael-borck/enterprise-network-lab/blob/main/labs/00-tour.md" target="_blank" rel="noopener">
@@ -302,34 +302,39 @@
         protocol with tcpdump, then cut a WAN link — twice, two different ways — and watch OSPF heal it.</p>
       <div class="go">Open the lab →</div>
     </a>
-    <div class="card planned">
+    <a class="card" href="https://github.com/michael-borck/enterprise-network-lab/blob/main/labs/01-ids.md" target="_blank" rel="noopener">
       <span class="num">01</span>
-      <span class="chip plan">Planned</span>
-      <h3>Traffic replay &amp; IDS</h3>
-      <p>A tcpreplay container injects labelled attack captures into the office networks; you put a
-        Suricata/Zeek tap on the wire and learn to tell attack from background noise.</p>
-    </div>
-    <div class="card planned">
+      <span class="chip live">Available</span>
+      <h3>Intrusion detection</h3>
+      <p>Attack the network and watch a real Suricata sensor catch it against 52,000 Emerging Threats
+        rules. Record the incident, replay it, then write and tune a rule of your own.</p>
+      <div class="go">Open the lab →</div>
+    </a>
+    <a class="card" href="https://github.com/michael-borck/enterprise-network-lab/blob/main/labs/02-firewall.md" target="_blank" rel="noopener">
       <span class="num">02</span>
-      <span class="chip plan">Planned</span>
+      <span class="chip live">Available</span>
       <h3>Firewall the edge</h3>
-      <p>Write real nftables policy on an office router: allow the business, block the lateral
-        movement, and prove it against live connections.</p>
-    </div>
-    <div class="card planned">
+      <p>Write real nftables policy: contain the branch offices, stop lateral movement, and discover
+        the hard way that a firewall rule is not a statement of intent — it is a position in a list.</p>
+      <div class="go">Open the lab →</div>
+    </a>
+    <a class="card" href="https://github.com/michael-borck/enterprise-network-lab/blob/main/labs/03-wan-troubleshooting.md" target="_blank" rel="noopener">
       <span class="num">03</span>
-      <span class="chip plan">Planned</span>
+      <span class="chip live">Available</span>
       <h3>WAN troubleshooting</h3>
-      <p>“London says the intranet is slow.” Latency, loss, and jitter injected with netem —
-        diagnose it with mtr, iperf, and tcpdump like an on-call network engineer.</p>
-    </div>
-    <div class="card planned">
+      <p>Seven faults get injected — loss, jitter, one-way loss, an MTU black hole, DNS, a bandwidth
+        cap, asymmetric routing. Diagnose each one, and learn why "I can ping it" proves nothing.</p>
+      <div class="go">Open the lab →</div>
+    </a>
+    <a class="card" href="https://github.com/michael-borck/enterprise-network-lab/blob/main/labs/04-pcap2compose.md" target="_blank" rel="noopener">
       <span class="num">04</span>
-      <span class="chip plan">Planned</span>
-      <h3>pcap2compose — the capstone</h3>
-      <p>Given only a packet capture from an unknown company's incident, reconstruct their network
-        topology in Docker and replay the attack into it. Forensics meets archaeology.</p>
-    </div>
+      <span class="chip live">Capstone</span>
+      <h3>Rebuild a network from its traffic</h3>
+      <p>From a capture alone, infer the hosts, subnets, services and routers of a network you have
+        never seen — stand it back up in Docker, then find everything your reconstruction gets
+        confidently wrong.</p>
+      <div class="go">Open the lab →</div>
+    </a>
   </div>
 
   <div class="sec-h" style="margin-top:44px"><h2>The network</h2>

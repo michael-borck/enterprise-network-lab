@@ -126,11 +126,6 @@ If tcpdump complains about bad TCP checksums, that's checksum offload on
 veth interfaces, not corruption — add `--dont-verify-checksums` mentally,
 or disable offload: `ethtool -K eth0 tx off`.
 
-## Roadmap
-
-- **`pcap2compose`** — reconstruct a network topology from a capture file
-  and replay the capture into it (forensics capstone).
-
 ## Labs
 
 | Lab | Topic |
@@ -139,3 +134,4 @@ or disable offload: `ethtool -K eth0 tx off`.
 | [01-ids](labs/01-ids.md) | Intrusion detection: attack the network, watch Suricata catch it, capture the incident, replay it, write and tune your own rule |
 | [02-firewall](labs/02-firewall.md) | Edge firewall: write real nftables policy, contain the branch offices, stop lateral movement, and learn why rule order is everything |
 | [03-wan-troubleshooting](labs/03-wan-troubleshooting.md) | Diagnose seven injected WAN faults — loss, jitter, one-way loss, an MTU black hole, DNS, a bandwidth cap, and asymmetric routing |
+| [04-pcap2compose](labs/04-pcap2compose.md) | Capstone: reconstruct an unknown network from a packet capture, stand it back up in Docker, and find everything the reconstruction gets confidently wrong |

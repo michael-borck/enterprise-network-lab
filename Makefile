@@ -17,7 +17,7 @@ endif
         wan-cut wan-blackhole wan-heal attack capture replay \
         ids-alerts ids-watch ids-summary ids-reload \
         fw-load fw-list fw-flush fw-counters fw-test \
-        fault fault-clear iperf
+        fault fault-clear iperf rebuild
 
 up: host
 	@find . -name '._*' -delete 2>/dev/null || true
@@ -221,6 +221,13 @@ iperf:
 	@$(DC) exec -d london-ws1 iperf3 -s >/dev/null 2>&1 || true
 	@sleep 1
 	@$(DC) exec perth-ws1 iperf3 -c 10.20.10.101 -t 8 -i 2 || true
+
+# ── Lab 04: reconstruct a network from a capture ──────────────────────
+#   make rebuild PCAP=incident.pcap [OUT=rebuilt]
+rebuild:
+	@test -n "$(PCAP)" || (echo "usage: make rebuild PCAP=<file in pcaps/> [OUT=dir]" && exit 1)
+	python3 scripts/pcap2compose.py pcaps/$(PCAP) -o $(or $(OUT),rebuilt)
+	@echo "read $(or $(OUT),rebuilt)/REPORT.md before trusting the compose file"
 
 # Interactive shells on each office's workstation
 perth:
