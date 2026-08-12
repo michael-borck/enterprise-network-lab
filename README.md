@@ -1,6 +1,6 @@
 # enterprise-network-lab
 
-**Landing page: https://michael-borck.github.io/enterprise-network-lab/**
+**Landing page: https://enterprisenetwork.borck.education/**
 
 A miniature multi-site enterprise network that runs entirely in Docker.
 Four sites — **Perth (HQ)**, **London**, **Los Angeles**, and a remote
