@@ -334,6 +334,7 @@ def write_compose(topo, out_dir):
         lines += [f"  {net_name(cidr)}:",
                   "    driver_opts:",
                   "      com.docker.network.bridge.gateway_mode_ipv4: routed",
+                  '      isolate: "false"   # Podman/netavark: allow cross-network routing',
                   f"    ipam: {{config: [{{subnet: {cidr}}}]}}"]
     lines.append("")
 

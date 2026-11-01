@@ -13,6 +13,10 @@ name: enterprise-network-lab
 # ("routed" also disables NAT, so the lab has no path to the outside anyway).
 x-routed-bridge: &routed
   com.docker.network.bridge.gateway_mode_ipv4: routed
+  # Podman/netavark >= 2 (Podman 6) isolates bridge networks from each other by
+  # default. This lab routes *through* multi-homed containers, so every network
+  # must opt out. Docker ignores this option (it has its own isolation rules).
+  isolate: "false"
 
 x-workstation: &workstation
   image: nicolaka/netshoot:latest

@@ -2,15 +2,29 @@
 # Desktop (macOS/Windows) container networking goes through a userspace
 # switch that only delivers frames to IPs registered on each network —
 # transit routing through the FRR containers is impossible there. So on
-# Desktop the whole lab runs nested inside a privileged docker:dind
+# Docker Desktop the whole lab runs nested inside a privileged docker:dind
 # container ($(LAB_HOST)), where networks are real kernel bridges.
-LAB_HOST    = enterprise-lab-vm
-ON_DESKTOP := $(shell docker info -f '{{.OperatingSystem}}' 2>/dev/null | grep -c 'Docker Desktop')
+#
+# Podman is also supported: CONTAINER_ENGINE=podman make up. The Podman
+# machine on macOS/Windows is a Linux VM with real kernel bridges, so the lab
+# runs directly there too (no DinD). Use rootful Podman: the routers need
+# SYS_ADMIN/NET_ADMIN, tc netem and forwarding sysctls.
+ENGINE ?= $(if $(CONTAINER_ENGINE),$(CONTAINER_ENGINE),$(shell command -v docker >/dev/null 2>&1 && echo docker || echo podman))
+
+ifeq ($(ENGINE),podman)
+  COMPOSE := $(shell podman compose version >/dev/null 2>&1 && echo "podman compose" || echo "podman-compose")
+  ON_DESKTOP := 0
+else
+  COMPOSE := docker compose
+  ON_DESKTOP := $(shell docker info -f '{{.OperatingSystem}}' 2>/dev/null | grep -c 'Docker Desktop')
+endif
+
+LAB_HOST = enterprise-lab-vm
 
 ifeq ($(ON_DESKTOP),1)
 DC = docker exec -w /lab $(LAB_HOST) docker compose
 else
-DC = docker compose
+DC = $(COMPOSE)
 endif
 
 .PHONY: up down destroy host build ps logs test routes neighbors perth london la \
@@ -21,6 +35,12 @@ endif
 
 up: host
 	@find . -name '._*' -delete 2>/dev/null || true
+	@if [ "$(ENGINE)" = podman ] && \
+	   [ "$$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" = "true" ]; then \
+	  echo "NOTE: this lab needs rootful Podman (SYS_ADMIN, tc, forwarding sysctls)."; \
+	  echo "      macOS/Windows: podman machine set --rootful && podman machine stop && podman machine start"; \
+	  echo "      Linux:         run make as root, or use sudo podman ..."; \
+	fi
 	$(DC) up -d --build
 	@# The sensor lives in the Perth router's network namespace. If compose
 	@# recreated that router, the sensor is still attached to the old, dead

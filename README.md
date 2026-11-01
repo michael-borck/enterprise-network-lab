@@ -106,17 +106,50 @@ The `Makefile` detects which Docker you have and does the right thing:
 - **Docker Desktop (macOS/Windows)**: container networking goes through a
   userspace switch that only delivers frames to IPs registered on each
   network and doesn't forward multicast — transit routing through a router
-  container is impossible natively, no matter the configuration. So
+  container is impossible there, no matter the configuration. So
   `make up` transparently starts one privileged `docker:dind` container
   (`enterprise-lab-vm`) and runs the entire lab nested inside it, where
   networks are ordinary kernel bridges and everything behaves like Linux.
   Every `make` target proxies through it; the workflow is identical.
 
+### Podman
+
+Podman runs the same compose file. On macOS and Windows the Podman machine is
+a Linux VM with real kernel bridges, so the lab runs directly — no DinD layer.
+On Linux it runs against the host's netavark bridges.
+
+```bash
+CONTAINER_ENGINE=podman make up
+CONTAINER_ENGINE=podman make test
+CONTAINER_ENGINE=podman make down
+```
+
+Use **rootful** Podman: the routers need `SYS_ADMIN`/`NET_ADMIN`, `tc netem`
+and `net.ipv4.ip_forward` sysctls.
+
+```bash
+# macOS/Windows
+podman machine set --rootful
+podman machine stop && podman machine start
+```
+
+Every network sets `isolate: "false"`. Podman 6 / netavark 2 isolates bridge
+networks by default, which would otherwise drop traffic forwarded between the
+router containers' interfaces. Docker ignores the option and keeps using
+`gateway_mode_ipv4=routed`; Podman ignores the Docker-only gateway mode and
+uses the isolation opt-out.
+
+One difference from the Docker setup: Podman's managed bridge driver NATs
+outbound traffic by default, where Docker's `routed` mode does not. The lab's
+own traffic never needs real internet, so if you want the Docker version's
+"no path to the internet" guarantee, block egress at the host firewall.
+
 ## How it works
 
-- **Networks use `routed` gateway mode and are not `internal`** — both are
-  required for a container to forward transit traffic (see the section
-  above). There is no NAT anywhere, so the lab has no path to the internet;
+- **Networks use `routed` gateway mode (Docker) / `isolate: "false"` (Podman)
+  and are not `internal`** — both are required for a container to forward
+  transit traffic (see the section above). There is no NAT anywhere, so the
+  lab has no path to the internet;
   cross-subnet traffic can only flow through the FRR routers, and what you
   see in `traceroute` is real routing.
 - **Editable configs are mounted as directories, not files.** Rewriting a
