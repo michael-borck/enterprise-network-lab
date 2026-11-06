@@ -1,0 +1,26 @@
+# Podman-only Compose override.
+#
+# scripts/podman-networks.sh creates these bridge networks natively with
+# isolate=false. Marking them external stops the compose front-end recreating
+# them without that option (which would silently isolate every segment).
+networks:
+  perth-users:
+    external: true
+  perth-servers:
+    external: true
+  perth-dmz:
+    external: true
+  london-users:
+    external: true
+  la-users:
+    external: true
+  pilbara-users:
+    external: true
+  wan-perth-london:
+    external: true
+  wan-perth-la:
+    external: true
+  wan-perth-pilbara:
+    external: true
+  wan-london-la:
+    external: true

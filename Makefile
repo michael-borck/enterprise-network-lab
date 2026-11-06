@@ -14,9 +14,13 @@ ENGINE ?= $(if $(CONTAINER_ENGINE),$(CONTAINER_ENGINE),$(shell command -v docker
 ifeq ($(ENGINE),podman)
   COMPOSE := $(shell podman compose version >/dev/null 2>&1 && echo "podman compose" || echo "podman-compose")
   ON_DESKTOP := 0
+  # scripts/podman-networks.sh creates these natively with isolate=false; the
+  # override stops Compose recreating them without that option.
+  PODMAN_NET_OVERRIDE := -f docker-compose.yml -f scripts/podman-networks.yml
 else
   COMPOSE := docker compose
   ON_DESKTOP := $(shell docker info -f '{{.OperatingSystem}}' 2>/dev/null | grep -c 'Docker Desktop')
+  PODMAN_NET_OVERRIDE :=
 endif
 
 LAB_HOST = enterprise-lab-vm
@@ -24,7 +28,7 @@ LAB_HOST = enterprise-lab-vm
 ifeq ($(ON_DESKTOP),1)
 DC = docker exec -w /lab $(LAB_HOST) docker compose
 else
-DC = $(COMPOSE)
+DC = $(COMPOSE) $(PODMAN_NET_OVERRIDE)
 endif
 
 .PHONY: up down destroy host build ps logs test routes neighbors perth london la \
@@ -35,6 +39,7 @@ endif
 
 up: host
 	@find . -name '._*' -delete 2>/dev/null || true
+	@if [ "$(ENGINE)" = podman ]; then bash scripts/podman-networks.sh; fi
 	@if [ "$(ENGINE)" = podman ] && \
 	   [ "$$(podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null)" = "true" ]; then \
 	  echo "NOTE: this lab needs rootful Podman (SYS_ADMIN, tc, forwarding sysctls)."; \

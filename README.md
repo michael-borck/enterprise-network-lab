@@ -139,6 +139,11 @@ router containers' interfaces. Docker ignores the option and keeps using
 `gateway_mode_ipv4=routed`; Podman ignores the Docker-only gateway mode and
 uses the isolation opt-out.
 
+`make up` does not rely on the compose front-end preserving that option:
+`scripts/podman-networks.sh` creates the networks natively with
+`isolate=false` (including the `.200` WAN gateways), and the Makefile passes
+`scripts/podman-networks.yml` so Compose treats them as external.
+
 One difference from the Docker setup: Podman's managed bridge driver NATs
 outbound traffic by default, where Docker's `routed` mode does not. The lab's
 own traffic never needs real internet, so if you want the Docker version's
